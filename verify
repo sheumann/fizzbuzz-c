@@ -5,6 +5,7 @@ tests=""
 clang=false
 musl=false
 tcc=false
+occ=false
 standard=-std=c99
 
 for arg in "$@" ; do
@@ -16,6 +17,8 @@ for arg in "$@" ; do
         musl=true
     elif [ "$arg" = "-tcc" ] ; then
         tcc=true
+    elif [ "$arg" = "-occ" ] ; then
+        occ=true
     elif [ "$arg" = "-c90" ] ; then
         standard=-std=c90
     elif [ "$arg" = "-c99" ] ; then
@@ -25,7 +28,7 @@ for arg in "$@" ; do
     elif [ -f "$arg" ] ; then
         tests="$tests $arg"
     else
-        echo "Usage: $0 [-strict] [-clang] [-c90|-c99|-c11]" 1>&2
+        echo "Usage: $0 [-strict] [-clang|-occ] [-c90|-c99|-c11]" 1>&2
         exit 1
     fi
 done
@@ -36,11 +39,13 @@ elif $musl ; then
     CC=musl-gcc
 elif $tcc ; then
     CC=tcc
+elif $occ ; then
+    CC="occ -O63"
 else
     CC=gcc
 fi
 
-if ! $tcc ; then
+if ! $tcc && ! $occ ; then
     if $strict ; then
         CFLAGS="$standard -pedantic-errors -Wall -Wextra -O3"
     else
@@ -60,7 +65,7 @@ ok=true
 failures=''
 count=0
 for file in $tests ; do
-    echo -n .
+    /bin/echo -n .
     count=`expr $count + 1`
     if [ `expr $count % 50` -eq 0 ] ; then
         echo ''
@@ -68,9 +73,9 @@ for file in $tests ; do
     exe=`basename $file .c`
     out=`basename $file .c`.out
     if [ "$file" = "fizzbuzz007.c" ] ; then
-        $CC $CFLAGS -Wno-logical-op-parentheses $file -o $exe
+        $CC $CFLAGS $file -o $exe
     elif [ "$file" = "fizzbuzz026.c" ] ; then
-        $CC $CFLAGS -Wno-logical-op-parentheses $file -o $exe
+        $CC $CFLAGS $file -o $exe
     elif [ "$file" = "fizzbuzz027.c" ] || [ "$file" = "fizzbuzz068.c" ] ; then
         if [ "$CC" = "tcc" ] ; then
             $CC $CFLAGS -lpthread $file -o $exe
@@ -78,7 +83,7 @@ for file in $tests ; do
             $CC $CFLAGS -pthread $file -o $exe
         fi
     elif [ "$file" = "fizzbuzz064.c" ] ; then
-        $CC $CFLAGS -Wno-multichar $file -o $exe
+        $CC $CFLAGS $file -o $exe
     elif [ "$file" = "fizzbuzz076.c" ] ; then
         $CC $CFLAGS $file -o $exe -lgmp
     elif [ "$file" = "fizzbuzz106.c" ] ; then
@@ -107,12 +112,19 @@ for file in $tests ; do
     else
         $CC $CFLAGS $file -o $exe
     fi
-    ./$exe >$out
+    if $occ ; then
+        iix ./$exe >$out
+    else
+        ./$exe >$out
+    fi
     if ! cmp -s $out expected-output.txt ; then
         ok=false
         failures="$failures $file"
     fi
     rm -f $exe $out
+    if $occ ; then
+        rm -f $exe.a $exe.root
+    fi
 done
 if [ `expr $count % 50` -ne 0 ] ; then
     echo ''
